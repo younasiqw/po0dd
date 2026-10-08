@@ -202,11 +202,9 @@ mkdir -p /etc/ssh/sshd_config.d; \
 echo "Port ${SSH_PORT}" > /etc/ssh/sshd_config.d/00-custom.conf; \
 echo "PermitRootLogin yes" >> /etc/ssh/sshd_config.d/00-custom.conf; \
 echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config.d/00-custom.conf; \
-cat << "APT_EOF" > /etc/apt/sources.list\n\
-deb http://${MIRROR_HOST}/debian/ ${OS_VER} main contrib non-free non-free-firmware\n\
-deb http://${MIRROR_HOST}/debian/ ${OS_VER}-updates main contrib non-free non-free-firmware\n\
-deb http://${MIRROR_HOST}/debian-security ${OS_VER}-security main contrib non-free non-free-firmware\n\
-APT_EOF\n\
+echo "deb http://${MIRROR_HOST}/debian/ ${OS_VER} main contrib non-free non-free-firmware" > /etc/apt/sources.list; \
+echo "deb http://${MIRROR_HOST}/debian/ ${OS_VER}-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list; \
+echo "deb http://${MIRROR_HOST}/debian-security ${OS_VER}-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list; \
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime; \
 echo "Asia/Shanghai" > /etc/timezone; \
 sync'
@@ -214,6 +212,7 @@ EOF
 
     cd /tmp/preseed_dir
     find . | cpio -H newc -o | gzip -9 > /boot/netboot/preseed.cpio.gz
+    cd /
     cat /boot/netboot/preseed.cpio.gz >> /boot/netboot/initrd.gz
     rm -rf /tmp/preseed_dir /boot/netboot/preseed.cpio.gz
 }
@@ -231,7 +230,6 @@ setup_ubuntu() {
     echo -e "${GREEN}[2/4]${PLAIN} 构建全自动内网安装逻辑..."
     RAW_IMAGE_URL="http://${MIRROR_HOST}/ubuntu-cloud-images/${OS_VER}/current/${OS_VER}-server-cloudimg-${UBUNTU_ARCH}.raw.tar.gz"
 
-    # 生成密文哈希
     PASS_HASH=$(openssl passwd -6 "${ROOT_PASS}")
 
     mkdir -p /tmp/preseed_dir
@@ -240,6 +238,16 @@ d-i debian-installer/locale string en_US.UTF-8
 d-i console-keymaps-at/keymap select us
 d-i keyboard-configuration/xkb-keymap select us
 d-i netcfg/choose_interface select auto
+d-i netcfg/get_hostname string ubuntu
+d-i netcfg/get_domain string local
+
+# 显式锁定腾讯内网源与版本，彻底杜绝 Bad archive mirror 报错
+d-i mirror/country string manual
+d-i mirror/http/hostname string ${MIRROR_HOST}
+d-i mirror/http/directory string /debian
+d-i mirror/http/proxy string
+d-i mirror/codename string bookworm
+d-i mirror/suite string bookworm
 
 # 在磁盘分区前执行流式解压写入与系统定制
 d-i partman/early_command string /bin/sh -c '\
@@ -252,27 +260,20 @@ mount -o rw \${TARGET_PART} /mnt/target || mount -o rw /dev/disk/by-label/cloudi
 sed -i "s|^root:[^:]*:|root:${PASS_HASH}:|" /mnt/target/etc/shadow; \
 sed -i "s/disable_root: true/disable_root: false/g" /mnt/target/etc/cloud/cloud.cfg 2>/dev/null; \
 mkdir -p /mnt/target/etc/cloud/cloud.cfg.d; \
-cat << "CLOUD_EOF" > /mnt/target/etc/cloud/cloud.cfg.d/99-custom.cfg\n\
-ssh_pwauth: true\n\
-disable_root: false\n\
-CLOUD_EOF\n\
+echo "ssh_pwauth: true" > /mnt/target/etc/cloud/cloud.cfg.d/99-custom.cfg; \
+echo "disable_root: false" >> /mnt/target/etc/cloud/cloud.cfg.d/99-custom.cfg; \
 sed -i "s/^#\?Port .*/Port ${SSH_PORT}/" /mnt/target/etc/ssh/sshd_config; \
 sed -i "s/^#\?PermitRootLogin .*/PermitRootLogin yes/" /mnt/target/etc/ssh/sshd_config; \
 sed -i "s/^#\?PasswordAuthentication .*/PasswordAuthentication yes/" /mnt/target/etc/ssh/sshd_config; \
 mkdir -p /mnt/target/etc/ssh/sshd_config.d; \
-cat << "SSH_EOF" > /mnt/target/etc/ssh/sshd_config.d/00-custom.conf\n\
-Port ${SSH_PORT}\n\
-PermitRootLogin yes\n\
-PasswordAuthentication yes\n\
-SSH_EOF\n\
+echo "Port ${SSH_PORT}" > /mnt/target/etc/ssh/sshd_config.d/00-custom.conf; \
+echo "PermitRootLogin yes" >> /mnt/target/etc/ssh/sshd_config.d/00-custom.conf; \
+echo "PasswordAuthentication yes" >> /mnt/target/etc/ssh/sshd_config.d/00-custom.conf; \
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /mnt/target/etc/localtime; \
 echo "Asia/Shanghai" > /mnt/target/etc/timezone; \
-cat << "APT_EOF" > /mnt/target/etc/apt/sources.list\n\
-deb http://${MIRROR_HOST}/ubuntu/ ${OS_VER} main restricted universe multiverse\n\
-deb http://${MIRROR_HOST}/ubuntu/ ${OS_VER}-updates main restricted universe multiverse\n\
-deb http://${MIRROR_HOST}/ubuntu/ ${OS_VER}-backports main restricted universe multiverse\n\
-deb http://${MIRROR_HOST}/ubuntu/ ${OS_VER}-security main restricted universe multiverse\n\
-APT_EOF\n\
+echo "deb http://${MIRROR_HOST}/ubuntu/ ${OS_VER} main restricted universe multiverse" > /mnt/target/etc/apt/sources.list; \
+echo "deb http://${MIRROR_HOST}/ubuntu/ ${OS_VER}-updates main restricted universe multiverse" >> /mnt/target/etc/apt/sources.list; \
+echo "deb http://${MIRROR_HOST}/ubuntu/ ${OS_VER}-security main restricted universe multiverse" >> /mnt/target/etc/apt/sources.list; \
 if [ -f /mnt/target/etc/apt/sources.list.d/ubuntu.sources ]; then \
     sed -i "s|http://archive.ubuntu.com/ubuntu|http://${MIRROR_HOST}/ubuntu|g" /mnt/target/etc/apt/sources.list.d/ubuntu.sources; \
     sed -i "s|http://security.ubuntu.com/ubuntu|http://${MIRROR_HOST}/ubuntu|g" /mnt/target/etc/apt/sources.list.d/ubuntu.sources; \
@@ -283,6 +284,7 @@ EOF
 
     cd /tmp/preseed_dir
     find . | cpio -H newc -o | gzip -9 > /boot/netboot/preseed.cpio.gz
+    cd /
     cat /boot/netboot/preseed.cpio.gz >> /boot/netboot/initrd.gz
     rm -rf /tmp/preseed_dir /boot/netboot/preseed.cpio.gz
 }
@@ -290,8 +292,8 @@ EOF
 # 8. 写入 GRUB 优先启动项
 setup_grub() {
     echo -e "${GREEN}[3/4]${PLAIN} 配置 GRUB 引导入口..."
+    cd /
 
-    # 优先创建 05_netboot，保证在 GRUB 列表中排在最前面 (Entry 0)
     cat << 'EOF' > /etc/grub.d/05_netboot
 #!/bin/sh
 exec tail -n +3 $0
@@ -311,6 +313,12 @@ menuentry "Tencent Netboot Installer" {
 }
 EOF
     chmod +x /etc/grub.d/05_netboot
+
+    # 强制将默认引导项设为网络安装器，防止云厂商环境拦截
+    if [ -f /etc/default/grub ]; then
+        sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT="Tencent Netboot Installer"/' /etc/default/grub
+        sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/' /etc/default/grub
+    fi
 
     # 更新 GRUB 配置文件
     if command -v update-grub >/dev/null 2>&1; then
