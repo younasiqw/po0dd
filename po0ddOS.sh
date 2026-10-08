@@ -179,10 +179,12 @@ d-i partman/choose_partition select finish
 d-i partman/confirm boolean true
 d-i partman/confirm_nooverwrite boolean true
 
+# 仅创建 root 账户，禁止创建普通用户，允许弱密码通过
 d-i passwd/root-login boolean true
 d-i passwd/make-user boolean false
 d-i passwd/root-password password ${ROOT_PASS}
 d-i passwd/root-password-again password ${ROOT_PASS}
+d-i user-setup/allow-password-weak boolean true
 
 tasksel tasksel/first multiselect standard, ssh-server
 d-i pkgsel/include string curl wget ca-certificates openssh-server
@@ -241,13 +243,26 @@ d-i netcfg/choose_interface select auto
 d-i netcfg/get_hostname string ubuntu
 d-i netcfg/get_domain string local
 
-# 显式锁定腾讯内网源与版本，彻底杜绝 Bad archive mirror 报错
+# 显式锁定腾讯内网源与版本，跳过外部源校验
 d-i mirror/country string manual
 d-i mirror/http/hostname string ${MIRROR_HOST}
 d-i mirror/http/directory string /debian
 d-i mirror/http/proxy string
 d-i mirror/codename string bookworm
 d-i mirror/suite string bookworm
+
+# 时区配置
+d-i clock-setup/utc boolean true
+d-i time/zone string Asia/Shanghai
+d-i clock-setup/ntp boolean true
+d-i clock-setup/ntp-server string ntp.tencent.com
+
+# 关键：彻底跳过用户交互，仅配置 root，不创建任何普通用户，绕过弱密码提示
+d-i passwd/root-login boolean true
+d-i passwd/make-user boolean false
+d-i passwd/root-password password ${ROOT_PASS}
+d-i passwd/root-password-again password ${ROOT_PASS}
+d-i user-setup/allow-password-weak boolean true
 
 # 在磁盘分区前执行流式解压写入与系统定制
 d-i partman/early_command string /bin/sh -c '\
@@ -314,7 +329,7 @@ menuentry "Tencent Netboot Installer" {
 EOF
     chmod +x /etc/grub.d/05_netboot
 
-    # 强制将默认引导项设为网络安装器，防止云厂商环境拦截
+    # 强制将默认引导项设为网络安装器
     if [ -f /etc/default/grub ]; then
         sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT="Tencent Netboot Installer"/' /etc/default/grub
         sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/' /etc/default/grub
